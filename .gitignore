@@ -1,0 +1,5 @@
+*.ipynb
+*.npy
+*.log
+*.png
+mlruns/
