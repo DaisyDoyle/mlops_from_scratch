@@ -251,8 +251,10 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
             })
 
             global _request_buffer
-            
+
             _request_buffer.append(X_raw.tolist())
+            print(f"[BUFFER] Added request to buffer. Current size: {len(_request_buffer)}")
+
             _inference_run.log_metric("confidence", round(max(prob, 1 - prob), 3))
             _inference_run.log_metric("prediction", 1 if predicted_class == "Besni" else 0)
 
@@ -270,6 +272,9 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
                 print("[WARNING] Drift detector not initialised — skipping check")
 
         except Exception as e:
+            print(f"[ERROR] Inference error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             self.send_error_response(500, f"Inference error: {str(e)}")
 
     def parse_json_payload(self):
@@ -292,6 +297,7 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    load_trained_parameters()
     addr = ('', 8080)
     server = HTTPServer(addr, ModelTrainingRequestHandler)
     print("Integrated Server online. Dashboard: http://localhost:8080/loss")

@@ -51,8 +51,8 @@ def split_dataset(X_normalized, y):
 def train_model(X_train, y_train, X_val, y_val, run: Run):
     from model import LogisticRegression
 
-    logger.info("Training model with hyperparameters: learning_rate=0.1, n_iters=100, lambda_=0")
-    params = dict(learning_rate=0.1, n_iters=100, lambda_=0)
+    logger.info("Training model with hyperparameters: learning_rate=0.1, n_iters=300, lambda_=0")
+    params = dict(learning_rate=0.1, n_iters=300, lambda_=0.0)
     for k, v in params.items():
         run.log_param(k, v)
 
@@ -115,7 +115,6 @@ def save_model(model, X_mean, X_std, save_dir, run: Run):
     np.save(f"{save_dir}/model_bias.npy",    model.bias)
     np.save(f"{save_dir}/scaler_mean.npy",   X_mean)
     np.save(f"{save_dir}/scaler_std.npy",    X_std)
-
     
     for fname in ["model_weights.npy", "model_bias.npy", "scaler_mean.npy", "scaler_std.npy"]:
         run.log_artifact(f"{save_dir}/{fname}")
@@ -129,6 +128,10 @@ if __name__ == "__main__":
     df = load_data()
     X_mean, X_std, X_normalized, y = preprocess_data(df)
     X_train, y_train, X_val, y_val, X_test, y_test = split_dataset(X_normalized.values, y)
+
+    X_test_raw = (X_test * X_std.values) + X_mean.values
+    for row in X_test_raw[:5]:
+        logging.info(f"Sample features (raw): {row}")
 
     model = train_model(X_train, y_train, X_val, y_val, run)
 

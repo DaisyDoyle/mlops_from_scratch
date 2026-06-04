@@ -1,9 +1,9 @@
-# evaluator.py
 import json
 import numpy as np
 from datetime import datetime
 from pathlib import Path
 
+Path("logs").mkdir(exist_ok=True)
 METRICS_LOG = Path("logs/evaluation_log.jsonl")
 METRICS_LOG.parent.mkdir(exist_ok=True)
 

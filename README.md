@@ -8,6 +8,8 @@ No sklearn, no Flask, no MLflow — everything is built from scratch.
 
 ```
 ml_from_scratch/
+├── data/
+│   └──Raisin_Dataset.csv
 ├── src/
 │   ├── model.py              # Logistic regression: sigmoid, BCE loss, gradient descent, L2 regularisation
 │   ├── train.py              # Training pipeline: load, preprocess, split, train, evaluate, save
@@ -74,8 +76,13 @@ for i in $(seq 1 100); do
     -d '{"features": [87524, 442.25, 253.29, 0.819, 98270, 0.651, 1184.0]}' > /dev/null
 done
 
-# Inspect the inference run after drift flushes
-cat src/mlruns/inference/*/run.json
+
+# Demo PSI with different values, run from project root
+tail -n +2 data/Raisin_Dataset.csv | sort -R | head -100 | while IFS=',' read -r area maj min ecc conv ext per class; do
+  curl -s -X POST http://localhost:8080/predict \
+    -H "Content-Type: application/json" \
+    -d "{\"features\": [$area, $maj, $min, $ecc, $conv, $ext, $per]}" > /dev/null
+done
 ```
 
 ## Experiment tracking
@@ -104,7 +111,7 @@ src/mlruns/
 
 Incoming prediction requests are buffered. Every 100 requests, PSI (Population Stability
 Index) is computed per feature against the training distribution saved in
-`models/reference_data.npy`. PSI > 0.2 signals significant drift and is logged to the
+`models/reference_data.npy`. PSI > 0.25 signals significant drift and is logged to the
 console and to the inference run.
 
 ## Next steps

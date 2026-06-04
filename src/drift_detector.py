@@ -1,8 +1,9 @@
-# drift_detector.py
 import numpy as np
 import json
 from pathlib import Path
 from datetime import datetime
+
+Path("logs").mkdir(exist_ok=True)
 
 class DriftDetector:
     """
@@ -38,9 +39,9 @@ class DriftDetector:
                 "status": "ok" if score < 0.1 else "warn" if score < 0.25 else "DRIFT"
             }
 
-        # Log it
+        # Log results to a file for monitoring
         record = {"timestamp": datetime.utcnow().isoformat(), "features": results}
-        with open("logs/drift_log.jsonl", "a") as f:
+        with open("logs/drift_log.jsonl", "a") as f: # changed to directory
             f.write(json.dumps(record) + "\n")
 
         drifted = [k for k, v in results.items() if v["status"] == "DRIFT"]
