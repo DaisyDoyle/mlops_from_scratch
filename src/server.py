@@ -61,8 +61,6 @@ def get_schema():
         schema.append(entry)
     return schema
 
-#         print(f"[WARNING] Missing file: {e}")
-#         scalar_mean, scalar_std, detector = None, None, None
 
 def load_trained_parameters():
     global model, scalar_mean, scalar_std, detector
@@ -203,7 +201,7 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
                         load_trained_parameters()
                         print(f"[TRAIN] Reload complete. Weights: {model.weights is not None}")
                     else:
-                        print(f"[TRAIN] Training script failed — not reloading")
+                        print("[TRAIN] Training script failed — not reloading")
                 except Exception as e:
                     print(f"[TRAIN] Exception in thread: {e}")
                 finally:
@@ -248,8 +246,8 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
 
             if np.any(np.abs(X_scaled) > 10):
-                print(f"[WARNING] Scaled features contain extreme values — "
-                    f"check whether input is already normalised")
+                print("[WARNING] Scaled features contain extreme values — "
+                    "check whether input is already normalised")
 
             logit = np.dot(model.weights, X_scaled) + model.bias
             print(f"[DEBUG] Logit:        {logit}")
@@ -300,7 +298,8 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
     def parse_json_payload(self):
         content_length = int(self.headers.get('Content-Length', 0))
-        if content_length == 0: return None
+        if content_length == 0: 
+            return None
         return json.loads(self.rfile.read(content_length).decode('utf-8'))
 
     def send_success_response(self, code, payload):

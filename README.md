@@ -27,15 +27,20 @@ ml_from_scratch/
 ```
 
 ## Quickstart
-
+If using venv:
 ```bash
 pip install -r requirements.txt
-
-# Train the model (saves weights to models/)
+```
+If using conda:
+```bash
+conda install --yes --file requirements.txt
+```
+Train the model (saves weights to models/).
+```bash
 python src/train.py
-
-# Start the API server
-cd src
+```
+Start the API server.
+```bash
 python ../src/server.py
 ```
 
@@ -122,8 +127,6 @@ Index) is computed per feature against the training distribution saved in
 console and to the inference run.
 
 ## Next steps
-
-The brief raised several questions this project addresses — and a few worth taking further:
 
 - **Docker**: package the server into a minimal container. Given the only runtime
   dependency is NumPy, an `python:3.11-slim` base should get the image under ~80MB.
