@@ -47,5 +47,6 @@ class DriftDetector:
         drifted = [k for k, v in results.items() if v["status"] == "DRIFT"]
         if drifted:
             print(f"[DRIFT ALERT] Features drifted: {drifted}")
+           
 
         return results

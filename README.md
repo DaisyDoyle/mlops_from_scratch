@@ -35,7 +35,8 @@ pip install -r requirements.txt
 python src/train.py
 
 # Start the API server
-python src/server.py
+cd src
+python ../src/server.py
 ```
 
 ## API endpoints
@@ -83,6 +84,12 @@ tail -n +2 data/Raisin_Dataset.csv | sort -R | head -100 | while IFS=',' read -r
     -H "Content-Type: application/json" \
     -d "{\"features\": [$area, $maj, $min, $ecc, $conv, $ext, $per]}" > /dev/null
 done
+
+
+# GET endpoints — fetch data
+curl http://localhost:8080/loss    > loss_curve.png && open loss_curve.png
+curl http://localhost:8080/debug  | jq .
+curl http://localhost:8080/schema | jq .
 ```
 
 ## Experiment tracking

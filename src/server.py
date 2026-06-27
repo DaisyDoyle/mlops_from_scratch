@@ -10,6 +10,16 @@ from mlflow_scratch import Run
 from model import LogisticRegression
 import threading
 
+import logging 
+
+
+logging.basicConfig(level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s [%(filename)s:%(lineno)d]',
+    handlers=[logging.FileHandler("server.log"), logging.StreamHandler()]
+    )
+logger = logging.getLogger(__name__)
+
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 
@@ -78,6 +88,14 @@ def load_trained_parameters():
         print(f"[WARNING] Missing file: {e}")
         scalar_mean, scalar_std, detector = None, None, None
 
+
+
+def drift_detection(new_data):
+    global detector
+    detector = DriftDetector(new_data, FEATURE_NAMES)
+    logger.info(f"detector loaded new ref data: {new_data[:1]}")
+    # return detector
+    
 
 
 class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
@@ -267,6 +285,9 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
                     _inference_run.log_metric(f"psi_{feature}", result.get("psi", 0))
 
                 _inference_run.save()  
+
+                drift_detection(batch)
+
                 print(f"[DRIFT CHECK] {json.dumps(drift_results, indent=2)}")
             elif detector is None:
                 print("[WARNING] Drift detector not initialised — skipping check")
@@ -297,7 +318,7 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    load_trained_parameters()
+    load_trained_parameters() # new line
     addr = ('', 8080)
     server = HTTPServer(addr, ModelTrainingRequestHandler)
     print("Integrated Server online. Dashboard: http://localhost:8080/loss")
