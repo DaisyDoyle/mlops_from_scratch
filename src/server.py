@@ -4,7 +4,7 @@ import os
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-from explain import explain_prediction, FEATURE_NAMES
+from explain import explain_prediction, FEATURE_NAMES, plot_waterfall
 from drift_detector import DriftDetector
 from mlflow_scratch import Run
 from model import LogisticRegression
@@ -110,6 +110,17 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error_response(404, "Loss curve not found. Run /train first.")
 
+        elif self.path == "/waterfall":
+            image_path = os.path.join(MODELS_DIR, "waterfall.png")
+            if os.path.exists(image_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.end_headers()
+                with open(image_path, "rb") as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_error_response(404, "No waterfall plot yet. POST /explain first.")
+
         elif self.path == "/health":
             self.send_success_response(200, {
                 "status":          "ok",
@@ -147,7 +158,7 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
             self.handle_train()
         elif self.path == "/predict":
             self.handle_predict()
-        elif self.path == "/explain":        # ← this line is missing
+        elif self.path == "/explain":        
             self.handle_explain()
         else:
             self.send_error_response(404, "Endpoint not found. Use POST /train or POST /predict")
@@ -174,6 +185,10 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
                 model.weights, model.bias,
                 scalar_mean, scalar_std, X_raw
             )
+
+            waterfall_path = os.path.join(MODELS_DIR, "waterfall.png")
+            plot_waterfall(result, waterfall_path)
+
             self.send_success_response(200, result)
 
         except Exception as e:

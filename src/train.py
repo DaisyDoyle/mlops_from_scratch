@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def load_data():
     logger.info("Loading dataset")
-    df = pd.read_csv("../data/Raisin_Dataset.csv")
+    df = pd.read_csv("data/Raisin_Dataset.csv")
     return df
 
 def preprocess_data(df):

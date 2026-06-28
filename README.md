@@ -41,7 +41,7 @@ python src/train.py
 ```
 Start the API server.
 ```bash
-python ../src/server.py
+python src/server.py
 ```
 
 ## API endpoints
@@ -57,7 +57,7 @@ python ../src/server.py
 | `/debug`  | GET    | Raw weights, bias, and scaler values           |
 
 ## Example requests
-
+In a seperate terminal run the below endpoints.
 ```bash
 # Check server status
 curl http://localhost:8080/health
