@@ -258,7 +258,6 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
             with _model_lock:
                 weights     = model.weights
-                bias        = model.bias
                 mean        = scalar_mean
                 std         = scalar_std
 
