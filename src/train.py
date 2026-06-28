@@ -5,6 +5,8 @@ import os
 import sys
 import logging
 from mlflow_scratch import Run  
+from utils import scale
+from constants import FEATURE_NAMES, CLASS_ENCODING
 
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
@@ -21,18 +23,22 @@ logger = logging.getLogger(__name__)
 
 def load_data():
     logger.info("Loading dataset")
-    df = pd.read_csv("data/Raisin_Dataset.csv")
+    df = pd.read_csv(os.path.join(BASE_DIR, "data", "Raisin_Dataset.csv"))
+    assert list(df.columns[:len(FEATURE_NAMES)]) == FEATURE_NAMES, \
+        f"Column mismatch: expected {FEATURE_NAMES}, got {list(df.columns)}"
     return df
+
 
 def preprocess_data(df):
     logger.info("Preprocessing data")
-    X = df.drop(columns=["Class"])
+    X = df[FEATURE_NAMES]
     X_mean = X.mean(axis=0)
     X_std  = X.std(axis=0)
     np.save(os.path.join(MODELS_DIR, "reference_data.npy"), X.values)
-    X_normalized = (X - X_mean) / X_std
-    y = df["Class"].apply(lambda x: 1 if x == "Kecimen" else 0).values
+    X_normalized = scale(X, X_mean, X_std)
+    y = df["Class"].map(CLASS_ENCODING).values
     return X_mean, X_std, X_normalized, y
+
 
 def split_dataset(X_normalized, y):
     logger.info("Splitting dataset into train/val/test")
@@ -47,6 +53,7 @@ def split_dataset(X_normalized, y):
     return (X_normalized[train_idx], y[train_idx],
             X_normalized[val_idx],   y[val_idx],
             X_normalized[test_idx],  y[test_idx])
+
 
 def train_model(X_train, y_train, X_val, y_val, run: Run):
     from model import LogisticRegression
@@ -66,6 +73,7 @@ def train_model(X_train, y_train, X_val, y_val, run: Run):
 
     return model
 
+
 def calculate_roc_auc_score(y_true, y_scores):
     pos_scores = y_scores[y_true == 1]
     neg_scores = y_scores[y_true == 0]
@@ -75,13 +83,21 @@ def calculate_roc_auc_score(y_true, y_scores):
     )
     return correct / (len(pos_scores) * len(neg_scores))
 
+
 def calculate_f1_score(predictions, y_test):
     tp = np.sum((predictions == 1) & (y_test == 1))
     fp = np.sum((predictions == 1) & (y_test == 0))
     fn = np.sum((predictions == 0) & (y_test == 1))
-    precision = tp / (tp + fp)
-    recall    = tp / (tp + fn)
-    return 2 * (precision * recall) / (precision + recall)
+    
+    with np.errstate(divide='ignore', invalid='ignore'):
+        precision = np.where((tp + fp) > 0, tp / (tp + fp), 0.0)
+        recall    = np.where((tp + fn) > 0, tp / (tp + fn), 0.0)
+        f1        = np.where((precision + recall) > 0,
+                             2 * (precision * recall) / (precision + recall),
+                             0.0)
+
+    return float(f1)
+
 
 def evaluate_model(model, X_test, y_test, run: Run):
     predictions  = model.predict(X_test)
@@ -99,6 +115,7 @@ def evaluate_model(model, X_test, y_test, run: Run):
 
     return accuracy, f1, roc_auc
 
+
 def plot_loss_curves(train_losses, val_losses, save_path):
     plt.figure()
     plt.plot(train_losses, label="Train Loss")
@@ -109,6 +126,7 @@ def plot_loss_curves(train_losses, val_losses, save_path):
     plt.legend()
     plt.savefig(save_path)
     plt.close()
+
 
 def save_model(model, X_mean, X_std, save_dir, run: Run):
     np.save(f"{save_dir}/model_weights.npy", model.weights)

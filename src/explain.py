@@ -1,13 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-FEATURE_NAMES = [
-    "Area", "MajorAxisLength", "MinorAxisLength",
-    "Eccentricity", "ConvexArea", "Extent", "Perimeter"
-]
+from constants import FEATURE_NAMES, CLASS_LABELS
+from utils import scale
+
 
 def explain_prediction(weights, bias, scaler_mean, scaler_std, X_raw):
-    X_scaled      = (X_raw - scaler_mean) / scaler_std
+    X_scaled      = scale(X_raw, scaler_mean, scaler_std)
     contributions = weights * X_scaled
     logit         = contributions.sum() + bias
     probability   = 1 / (1 + np.exp(-logit))
@@ -23,7 +22,7 @@ def explain_prediction(weights, bias, scaler_mean, scaler_std, X_raw):
     ], key=lambda x: abs(x["contribution"]), reverse=True)
 
     return {
-        "predicted_class": "Besni" if probability >= 0.5 else "Kecimen",
+        "predicted_class": CLASS_LABELS[int(probability >= 0.5)],
         "probability":     round(float(probability), 4),
         "logit":           round(float(logit), 4),
         "bias":            round(float(bias), 4),

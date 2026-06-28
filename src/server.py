@@ -4,10 +4,12 @@ import os
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-from explain import explain_prediction, FEATURE_NAMES, plot_waterfall
+from explain import explain_prediction, plot_waterfall
+from constants import FEATURE_NAMES
 from drift_detector import DriftDetector
 from mlflow_scratch import Run
 from model import LogisticRegression
+from utils import scale
 import threading
 
 import logging 
@@ -65,17 +67,26 @@ def get_schema():
 def load_trained_parameters():
     global model, scalar_mean, scalar_std, detector
     try:
-        model.weights = np.load(os.path.join(MODELS_DIR, "model_weights.npy"), allow_pickle=True)
-        model.bias    = float(np.load(os.path.join(MODELS_DIR, "model_bias.npy"), allow_pickle=True))
+
+        
+        weights = np.load(os.path.join(MODELS_DIR, "model_weights.npy"), allow_pickle=True)
+        bias    = float(np.load(os.path.join(MODELS_DIR, "model_bias.npy"), allow_pickle=True))
 
         raw_mean = np.load(os.path.join(MODELS_DIR, "scaler_mean.npy"), allow_pickle=True)
         raw_std  = np.load(os.path.join(MODELS_DIR, "scaler_std.npy"), allow_pickle=True)
 
-        scalar_mean = np.array(getattr(raw_mean, "values", raw_mean), dtype=float).flatten()
-        scalar_std  = np.array(getattr(raw_std,  "values", raw_std),  dtype=float).flatten()
+        new_mean = np.array(getattr(raw_mean, "values", raw_mean), dtype=float).flatten()
+        new_std  = np.array(getattr(raw_std,  "values", raw_std),  dtype=float).flatten()
 
         ref_data = np.load(os.path.join(MODELS_DIR, "reference_data.npy"), allow_pickle=True)
-        detector = DriftDetector(ref_data, FEATURE_NAMES)
+        new_detector = DriftDetector(ref_data, FEATURE_NAMES)
+
+        with _model_lock:   # atomic swap — no request reads half-updated state
+            model.weights = weights
+            model.bias    = bias
+            scalar_mean   = new_mean
+            scalar_std    = new_std
+            detector      = new_detector
 
         
         _inference_run.log_param("model_weights_shape", str(model.weights.shape))
@@ -88,19 +99,20 @@ def load_trained_parameters():
 
 
 
-def drift_detection(new_data):
-    global detector
-    detector = DriftDetector(new_data, FEATURE_NAMES)
-    logger.info(f"detector loaded new ref data: {new_data[:1]}")
-    # return detector
+# def drift_detection(new_data):
+#     global detector
+#     detector = DriftDetector(new_data, FEATURE_NAMES)
+#     logger.info(f"detector loaded new ref data: {new_data[:1]}")
+#     # return detector
     
 
 
 class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
-        if self.path == "/loss" or self.path == "/":
-            image_path = os.path.join(MODELS_DIR, "loss_curves.png")
+        
+        def _serve_image(self, path, not_found_message):
+            image_path = os.path.join(MODELS_DIR, f"{path}.png")
             if os.path.exists(image_path):
                 self.send_response(200)
                 self.send_header("Content-Type", "image/png")
@@ -108,19 +120,16 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
                 with open(image_path, "rb") as f:
                     self.wfile.write(f.read())
             else:
-                self.send_error_response(404, "Loss curve not found. Run /train first.")
+                self.send_error_response(404, not_found_message)
+
+
+        if self.path == "/loss" or self.path == "/":
+            _serve_image(self, "loss_curves", "Loss curve not found. Run /train first.")
 
         elif self.path == "/waterfall":
-            image_path = os.path.join(MODELS_DIR, "waterfall.png")
-            if os.path.exists(image_path):
-                self.send_response(200)
-                self.send_header("Content-Type", "image/png")
-                self.end_headers()
-                with open(image_path, "rb") as f:
-                    self.wfile.write(f.read())
-            else:
-                self.send_error_response(404, "No waterfall plot yet. POST /explain first.")
+            _serve_image(self, "waterfall", "No waterfall plot yet. POST /explain first.")
 
+            
         elif self.path == "/health":
             self.send_success_response(200, {
                 "status":          "ok",
@@ -165,7 +174,14 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
     def handle_explain(self):
         try:
-            if model.weights is None or scalar_mean is None:
+
+            with _model_lock:
+                weights     = model.weights
+                bias        = model.bias
+                mean        = scalar_mean
+                std         = scalar_std
+
+            if weights is None or mean is None:
                 self.send_error_response(503, "Model not loaded.")
                 return
 
@@ -176,20 +192,24 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
             X_raw = np.array(payload['features'], dtype=float).flatten()
 
-            if X_raw.shape != scalar_mean.shape:
+            if X_raw.shape != mean.shape:
                 self.send_error_response(422,
-                    f"Shape mismatch. Expected {scalar_mean.shape[0]} features, got {X_raw.shape[0]}.")
+                    f"Shape mismatch. Expected {mean.shape[0]} features, got {X_raw.shape[0]}.")
                 return
 
             result = explain_prediction(
-                model.weights, model.bias,
-                scalar_mean, scalar_std, X_raw
+                weights, bias,
+                mean, std, X_raw
             )
 
-            waterfall_path = os.path.join(MODELS_DIR, "waterfall.png")
-            plot_waterfall(result, waterfall_path)
-
             self.send_success_response(200, result)
+
+            try:
+
+                waterfall_path = os.path.join(MODELS_DIR, "waterfall.png")
+                plot_waterfall(result, waterfall_path)
+            except Exception as e:
+                logger.error(f"plot_waterfall failed: {e}")
 
         except Exception as e:
             self.send_error_response(500, f"Explain error: {str(e)}")
@@ -235,7 +255,14 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
     def handle_predict(self):
         try:
-            if model.weights is None or scalar_mean is None:
+
+            with _model_lock:
+                weights     = model.weights
+                bias        = model.bias
+                mean        = scalar_mean
+                std         = scalar_std
+
+            if weights is None or mean is None:
                 self.send_error_response(503, "Model parameters uninitialized.")
                 return
 
@@ -246,17 +273,17 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
 
             X_raw = np.array(payload['features'], dtype=float).flatten()
 
-            if X_raw.shape != scalar_mean.shape:
+            if X_raw.shape != mean.shape:
                 self.send_error_response(422, 
-                    f"Shape mismatch. Expected {scalar_mean.shape[0]} features, got {X_raw.shape[0]}.")
+                    f"Shape mismatch. Expected {mean.shape[0]} features, got {X_raw.shape[0]}.")
                 return
 
 
             print(f"[DEBUG] Raw input:    {X_raw}")
-            print(f"[DEBUG] Scaler mean:  {scalar_mean}")
-            print(f"[DEBUG] Scaler std:   {scalar_std}")
+            print(f"[DEBUG] Scaler mean:  {mean}")
+            print(f"[DEBUG] Scaler std:   {std}")
 
-            X_scaled = (X_raw - scalar_mean) / scalar_std
+            X_scaled = scale(X_raw, mean, std)
             print(f"[DEBUG] Scaled input: {X_scaled}")
 
 
@@ -264,14 +291,10 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
                 print("[WARNING] Scaled features contain extreme values — "
                     "check whether input is already normalised")
 
-            logit = np.dot(model.weights, X_scaled) + model.bias
-            print(f"[DEBUG] Logit:        {logit}")
-
             prob_matrix = model.predict_proba(X_scaled.reshape(1, -1))
-            final_probability = float(np.round(prob_matrix.item(), decimals=3))
-
-            print(f"[DEBUG] Probability:  {final_probability}")
             prob = float(np.round(prob_matrix.item(), decimals=3))
+
+            print(f"[DEBUG] Probability:  {prob}")
 
             predicted_class = "Besni" if prob >= 0.5 else "Kecimen"
 
@@ -298,8 +321,6 @@ class ModelTrainingRequestHandler(BaseHTTPRequestHandler):
                     _inference_run.log_metric(f"psi_{feature}", result.get("psi", 0))
 
                 _inference_run.save()  
-
-                drift_detection(batch)
 
                 print(f"[DRIFT CHECK] {json.dumps(drift_results, indent=2)}")
             elif detector is None:
